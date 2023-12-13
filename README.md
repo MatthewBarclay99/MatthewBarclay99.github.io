@@ -7,6 +7,7 @@ sidebar_label: Home
 
 ## About
 Hi :)
+![portrait](assets/img/IMG6465.JPG)
 
 ***
 
