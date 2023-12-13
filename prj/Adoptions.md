@@ -2,7 +2,7 @@
   layout: page
   title: "Adoptions"
   permalink: /Projects/Adoptions
-  theme: jekyll-theme-minimal
+  theme: jekyll-theme-cayman
 ---
 
 # Adoptions
