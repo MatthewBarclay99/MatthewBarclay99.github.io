@@ -6,7 +6,7 @@ logo: /assets/img/IMG_6465.JPG
 description: Bookmark this to keep an eye on my project updates!
 sidebar:
  - home
- - projects
+ - label: Projects
    children:
    - wine
    - adoptions
