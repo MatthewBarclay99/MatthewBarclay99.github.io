@@ -2,6 +2,7 @@
 layout: page
 title: "Projects"
 permalink: /Projects
+theme: jekyll-theme-minimal
 ---
 
 # Projects
