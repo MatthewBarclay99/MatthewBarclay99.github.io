@@ -5,14 +5,17 @@
 ## About
 Hi :)
 
+***
+
 ## Education
 **Master of Science, Business Analytics**
 :  University of California, Riverside | Riverside, CA | June 2024 
 
 **Bachelor of Science, Biological Sciences**
 :  Rice University| Houston, TX | May 2017 
-   *Minor in Statistics*
 
+:  *Minor in Statistics*
+***
 
 ## [Projects](Projects.md)
 ### School:
