@@ -1,6 +1,8 @@
-layout: page
-title: "Portfolio"
-permalink: /Home
+  ---
+  layout: page
+  title: "Portfolio"
+  permalink: /Home
+  ---
 
 # Portfolio
 
