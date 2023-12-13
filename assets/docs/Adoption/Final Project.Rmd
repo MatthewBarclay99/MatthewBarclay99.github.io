@@ -1,0 +1,349 @@
+---
+title: "An Analysis of Factors Influencing Pet Adoption"
+author: "Matthew Barclay"
+date: "12/16/2020"
+output:
+  html_document: default
+  pdf_document: default
+subtitle: DSCI 415 Final Report
+header-includes:
+  - \usepackage{array}
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(magrittr)
+library(knitr)
+library(tidyverse)
+library(gridExtra)
+library(pander)
+library(lme4)
+library(survival)
+library(survminer)
+library(car)
+knitr::opts_chunk$set(fig.height = 4)
+```
+
+
+```{r Data_Intake, include = FALSE, cache = TRUE}
+
+intake <- read.csv("Austin_Animal_Center_Intakes.csv")
+outcome <- read.csv("Austin_Animal_Center_Outcomes.csv")
+
+
+adopted <- left_join(intake, outcome, by = "Animal.ID") %>% filter(Outcome.Type == "Adoption", !is.na(Animal.ID)) %>%
+  mutate(DateTime.x = as.POSIXct(DateTime.x, format  = "%m/%d/%Y %I:%M:%S %p"), DateTime.y = as.POSIXct(DateTime.y, format  = "%m/%d/%Y %I:%M:%S %p")) %>%
+  mutate(Time.Elapsed = as.numeric(difftime(DateTime.y, DateTime.x, units = "days"))) %>% filter(Time.Elapsed >= 0) %>%
+  mutate(Date.of.Birth = as.POSIXct(Date.of.Birth, format  = "%m/%d/%Y")) %>%
+  mutate(Age.upon.Intake = as.numeric(difftime(DateTime.x, Date.of.Birth, units = "weeks"))) %>% filter(Age.upon.Intake >=0) %>% filter(Animal.Type.x == "Dog" | Animal.Type.x == "Cat")
+#Long and complex, but essentially joins the two data frames, converts dates to date objects, removes negative times, and filters out to see only adopted animals
+
+adopted <- adopted[!duplicated(adopted[,1:4]),]
+#Removes duplicated rows as a result of left join for animals that have had multiple adoptions, removes the incorrect rows
+
+adopted[,c(6,7, 8, 9, 11, 12, 17, 18, 19, 20, 23)] <- lapply(adopted[,c(6,7, 8, 9, 11, 12, 17, 18, 19, 20, 23)], factor)
+
+#Convert categorical rows to factors to be used in regression
+
+
+#Data:
+#Animal.ID- Assigned ID
+#Name.x- Animal name
+#DateTime.x- Date and time of arrival to shelter
+#MonthYear.x- Unformatted DateTime.x
+#Found.Location- Address of origin of animal
+#Intake.Type- Type of intake (categorical) -- "Abandoned"    "Euthanasia Request"    "Owner Surrender"   "Public Assist"    "Stray"    "Wildlife" 
+#Intake.Condition- Animal condition at arrival (categorical) --  "Aged" "Behavior" "Feral"  "Injured"  "Medical"  "Normal"   "Nursing"  "Other" "Pregnant" "Sick"    
+#Animal.Type.x- Animal type (categorical) -- "Bird"      "Cat"       "Dog"       "Livestock"    "Other"  
+#Sex.upon.Intake- Animal sex (categorical) -- "Intact Female" "Intact Male"   "Neutered Male" "Spayed Female"     "Unknown"  
+#Age.upon.Intake- Animal age at arrival in weeks (numerical (weeks old))
+#Breed.x- Animal Breed
+#Color.x- Animal color
+#Name.y- Animal name
+#DateTime.y- Date and time of adoption
+#MonthYear.y- Unformatted DateTime.y
+#Date.of.Birth- Animal DOB
+#Outcome.Type- If an animal was adopted, uniform Adopted for this dataset
+#Outcome.Subtype- If the animal was foster adopted
+#AnimalType.y- Animal type (categorical)
+#Sex.upon.Outcome- Animal sex (categorical)
+#Age.upon.Outcome- Animal age at adoption
+#Breed.y- Animal breed (categorical)
+#Color.y- Animal color
+#Time.Elapsed- Time spent in the shelter in weeks (numerical (weeks elapsed))
+```
+
+
+```{r MLR_Selection, include = FALSE, cache=TRUE}
+attach(adopted)
+#fwd selection
+fwd <- lm(log(Time.Elapsed)~1, data = adopted)
+#AIC
+step(fwd, scope = list(lower = ~1, upper = ~Intake.Type + Intake.Condition + Animal.Type.x + Sex.upon.Intake + Age.upon.Intake + Outcome.Subtype + Animal.Type.x *Age.upon.Intake), direction = "forward", data = adopted)
+#BIC
+n <- length(fwd$residuals)
+step(fwd, scope = list(lower = ~1, upper = ~Intake.Type + Intake.Condition + Animal.Type.x + Sex.upon.Intake + Age.upon.Intake + Outcome.Subtype + Animal.Type.x *Age.upon.Intake), direction = "forward", data = adopted, k = log(n))
+
+
+#Full Model
+model <- lm(log(Time.Elapsed) ~ Outcome.Subtype + Intake.Type +  Age.upon.Intake + Animal.Type.x + Intake.Condition + Sex.upon.Intake + Age.upon.Intake:Animal.Type.x, data = adopted)
+summary(model)
+#Multicollinearity
+car::vif(model)
+#DAAG::vif(model)
+
+
+#pairs(Time.Elapsed ~ Outcome.Subtype + Intake.Type +  Age.upon.Intake + Animal.Type.x + Intake.Condition + Sex.upon.Intake + Age.upon.Intake:Animal.Type.x, data = adopted)
+```
+
+
+
+```{r Prop_Hzds, include=FALSE, cache=TRUE}
+
+adopted <- adopted%>%mutate(Event = (Outcome.Type == "Adoption"))
+
+
+# Using the same variables chosen by forward AIC selection
+
+res.haz <- coxph(Surv(log(Time.Elapsed), event = Event) ~ Outcome.Subtype + Intake.Type + 
+    Age.upon.Intake + Animal.Type.x + Intake.Condition + Sex.upon.Intake + 
+    Age.upon.Intake:Animal.Type.x, data = adopted)
+
+# Effect = 1: No effect
+# Effect < 1: Reduces hazard
+# Effect > 1: Increases hazard
+
+summary(res.haz)
+ggsurvplot(survfit(res.haz), data = adopted)
+
+
+#Outcome Subtype
+newdata <- adopted%>%summarise(Outcome.Subtype = levels(Outcome.Subtype), Age.upon.Intake = mean(Age.upon.Intake), Intake.Type = levels(Intake.Type)[1], 
+                               Animal.Type.x = levels(Animal.Type.x)[1], Intake.Condition = levels(Intake.Condition)[1], Sex.upon.Intake = levels(Sex.upon.Intake)[1])
+foster_graph <- ggsurvplot(survfit(res.haz, newdata = newdata[c(1,3),]), data = adopted, legend.labs = c("Normal Adoption", "Foster Adoption"), xlab = "Log(Time)")$plot
+
+
+#Animal Type
+newdata <- adopted%>%summarise(Outcome.Subtype = levels(Outcome.Subtype)[1], Age.upon.Intake = mean(Age.upon.Intake), Intake.Type = levels(Intake.Type)[1], 
+                               Animal.Type.x = levels(Animal.Type.x), Intake.Condition = levels(Intake.Condition)[1], Sex.upon.Intake = levels(Sex.upon.Intake)[1])
+type_graph <- ggsurvplot(survfit(res.haz, newdata = newdata), data = adopted, legend.labs = c("Cat", "Dog"), xlab = "Log(Time)")$plot 
+
+
+#Sex
+newdata <- adopted%>%summarise(Outcome.Subtype = levels(Outcome.Subtype)[1], Age.upon.Intake = mean(Age.upon.Intake), Intake.Type = levels(Intake.Type)[1], 
+                               Animal.Type.x = levels(Animal.Type.x)[1], Intake.Condition = levels(Intake.Condition)[1], Sex.upon.Intake = levels(Sex.upon.Intake))
+sex_graph <- ggsurvplot(survfit(res.haz, newdata = newdata[1:4,]), data = adopted, xlab = "Log(Time)", legend.labs = levels(Sex.upon.Intake)[1:4])$plot 
+
+
+cox.zph(res.haz)
+
+haz.1 <- coxph(Surv(log(Time.Elapsed), event = Event) ~ 1, data = adopted)
+step(haz.1,  scope = list(lower = ~1, upper = ~Intake.Type + Intake.Condition + Animal.Type.x + Sex.upon.Intake + Age.upon.Intake + Outcome.Subtype + Animal.Type.x *Age.upon.Intake), direction = "forward", k = log(n))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Introduction
+
+Animal shelters across the United States receive nearly 6.5 million animals per year and are tasked with housing, feeding, and returning animals to owners or adopting these animals out. Invariably, with cost and size constraints many shelters must resort to euthanization to avoid overcrowding. According to the ASPCA, 1.5 million animal euthanizations  take place in animal shelters. Reducing the time spent in a shelter by an animal and conversely increasing the adoptions of animals spending a large amount of time in the shelter may be a solution to reduce the volume of euthanizations. 
+
+Using shelter data to analyze the factors that influence the time spent in a shelter before adoption may offer insight to assist shelter staff. By understanding the factors which increase time spent in the shelter, staff may be able to identify animals at risk of long stays and focus more attention to them to reduce their time until adoption. The goal of this analysis is to report the most influential factors affecting time spent in a shelter.
+
+All data were retrieved from the public database data.AustinTexas.gov which reports all animal intakes and outcomes for the Austin Animal Center since October, 2013. This shelter is a "No Kill" shelter and therefore animals leave the shelter by adoption, transfer to rescues, or returned to owners. Because the shelter does not engage in euthanizations, the data are not influenced by overcrowding and the time elapsed represents the true time until adoption for the animals. The data includes information on the intake type, intake condition, animal type, animal sex, outcome type, foster status, animal age, and the time spent in the shelter. The majority of this data are categorical, with animal age and time elapsed being the only numeric data. 
+
+The data will be analyzed using both multiple linear regression (MLR) and the Cox proportional hazards models. These models will be used to give insight on the factors influencing pet adoption.
+
+
+
+# Methods
+
+### Data Cleaning
+
+The raw data from the City of Austin is separated into two different datasets: Intakes and Outcomes. Therefore, the data was left joined via a unique Animal ID that is common between both datasets. The combined dataset included 122,000 entries, with the majority being animals returned to owners and some NA entries. These were filtered out to leave only adoptions in the dataset, shrinking it to 54,000 entries. The datasets did not include information on the time elapsed to adoption, so this was created by subtracting the date of adoption from the intake date to find the time in weeks spent in the shelter. Animal age was determined by subtracting the intake date from the animal's date of birth. The categorical variables were converted to factors to allow for use with R functions. Finally, birds, livestock, and "other" animals were removed from the dataset, as they accounted for less than 200 entries and skewed the regression values, leaving animal types of cats and dogs only. Breed and color data were also available, but there would be too many levels to the factors for it to make sense to use.
+The following table shows the structure of the cleaned dataset:
+
+\begin{center}
+\begin{tabular}{ | m{3cm} | m{2cm} | m{10cm} | }
+\hline
+ Variable & Type & Factor Levels/Info \\ 
+ \hline \hline
+ Animal.ID & Character &  Unique animal ID \\  
+  \hline
+ Name & Character &   Animal name if known   \\
+  \hline
+ DateTime.x & Date & Intake date \\
+  \hline
+ Intake.Type & Factor & "Abandoned" "Euthanasia Request" "Owner Surrender" Public Assist" "Stray" "Wildlife"  \\
+  \hline
+ Intake.Condition & Factor & "Aged" "Behavior" "Feral" "Injured" "Medical" "Normal" "Nursing" "Other" "Pregnant" "Sick" \\
+  \hline
+ Animal.Type & Factor  & "Cat" "Dog" \\
+  \hline
+ Sex.upon.Intake & Factor & "Intact Female" "Intact Male" "Neutered Male" "Spayed Female" "Unknown" \\
+  \hline
+ Age.upon.Intake & Numeric & Animal age in weeks \\
+  \hline
+ Outcome.Subtype & Factor & "Normal" "Barn" "Foster" "Offsite" \\
+  \hline
+ DateTime.y & Date & Date of adoption\\
+  \hline
+ Time.Elapsed & Numeric & Time spent in the shelter in weeks (DateTime.y - DateTime.x)\\
+  \hline
+ 
+ 
+\end{tabular}
+\end{center}
+
+
+## Models
+
+### MLR
+A multiple linear regression model was fit to explain the time spent in the shelter from the data collected on the animal. The response variable Time.Elapsed was highly right skewed and required a log transformation. The log transformation was necessary as it fixed the distribution of the residuals to fit linear model assumptions.
+```{r Diagnostic_Plots, fig.height=5.5}
+par(mfrow = c(2,2))
+plot(model)
+```
+After log the transformations, the model much more closely follows the assumptions for a linear model.
+
+Forward stepwise search was used to select the optimal linear model using both AIC and BIC, with both selecting the following model: 
+
+log(Time.Elapsed) ~ Outcome.Subtype + Intake.Type + Age.upon.Intake + Animal.Type.x + Intake.Condition + Sex.upon.Intake + Age.upon.Intake:Animal.Type.x 
+
+To test for multicollinearity, the variable inflation factor (VIF) was tested and all factors were below the reasonable level.
+
+### Proportional Hazards
+In addition to the MLR model, a Cox proportional hazards model was fit, as it is a strong method for determining the influence a factor, or "risk", has on an event happening. As the dataset contains only adopted animals, it was not necessary to censor the data because all entries have the "event" of adoption. The proportional hazards model was selected via stepwise forward AIC. The stepwise algorithm selected the same factors as MLR:  
+Intake.Type + Intake.Condition + Animal.Type.x + Sex.upon.Intake + Age.upon.Intake + Outcome.Subtype + Animal.Type.x *Age.upon.Intake
+
+Similar to MLR, the response variable is log transformed. While this model works well to highlight the effect of each factor, it may be inaccurate as the proportionality assumption, indicating that significant conclusions cannot be drawn using this model. As this report is focused only on suggesting possible effects, the significance of the model is not as important as its effects, and therefore should be used but with a grain of salt.
+
+### Mixed Effects Modelling
+A mixed effects model was considered for use, but the dataset did not contain any usable information on sub-groupings and therefore was not possible to be used. If  data on groupings such as zip code of adopters, adopter age group, or found location were available, it would be interesting to use a mixed effects model to explain more of the variance.
+
+# Results
+
+### MLR
+Because the response variable only is log transformed, the coefficients must be exponentiated before interpretation. The formula used for exponentiation was $(exp(coefficient)-1)*100$. The interpretation for exponentiated coefficients is the percent increase or decrease in the response for a one unit increase in the independent variable. For categorical variables, the coefficient is simply the percent change in the response variable compared to the dropped (baseline) category if that category is true and has zero effect if false.
+The coefficients for the multiple linear regression are as follows:
+
+\begin{center}
+\begin{tabular}{ | m{8cm} | m{2cm} | m{2cm} | m{3cm} | }
+\hline
+    Coefficient        &    Estimate  & Std. Error  & Pr(>|t|) \\
+\hline
+    \hline
+            (Intercept) 	        &    423.4	   &   19.96	   &   9.76E-20\\
+           \hline
+          Outcome.SubtypeBarn 	   &   -26.64    & 	104.7    	&  0.6655\\
+         \hline
+       Outcome.SubtypeFoster 	      &   348.8   &   	1.417  &  	0\\
+      \hline
+        Outcome.SubtypeOffsite       &	27.06	   &     6.735	&    0.0002389\\
+       \hline
+     Intake.TypeEuthanasia	 Request        &    47.42	    &  42.31     & 	0.2713\\
+    \hline
+     Intake.TypeOwner Surrender 	 &   -16.88	   &  13.26    & 	0.1376\\
+    \hline
+      Intake.TypePublic Assist 	    &  185.1	    &   13.79   &  	5.25E-16\\
+    \hline
+       Intake.TypeStray 	           &  29.33	     & 13.21	   & 0.03822\\
+    \hline
+     Age.upon.Intake                 &  0.1599	 &    0.007317	&  3.36E-105\\
+    \hline
+     Animal.Type.xDog 	         &      -36.5	    &  1.339   & 	7.54E-253\\
+    \hline
+     Intake.ConditionBehavior     &   	199.5	   &     87.86	&    0.08195\\
+    \hline
+     Intake.ConditionFeral 	       &    144	      &   32.51	&   0.001529\\
+    \hline
+     Intake.ConditionInjured 	      &    253	   &      14.54	&   1.61E-20\\
+    \hline
+     Intake.ConditionMedical 	       &   87.73    &  	34.94	  &  0.03557\\
+    \hline
+     Intake.ConditionNormal 	        &  109.3	  &    14.18	 &   2.54E-08\\
+    \hline
+     Intake.ConditionNursing 	  &       281.9	  &    14.89	 &   4.98E-22\\
+    \hline
+     Intake.ConditionOther 	     &      237.9    &   	21.8    & 	6.72E-10\\
+    \hline
+     Intake.ConditionPregnant 	  &     345.3    &  	29.43   & 	7.10E-09\\
+    \hline
+     Intake.ConditionSick          & 	178.3	    &    14.96    &	2.14E-13\\
+    \hline
+     Sex.upon.IntakeIntact Male 	  &  3.302	  &      1.251	 &   0.00897\\
+    \hline
+     Sex.upon.IntakeNeutered	Male          & 4.844    &   	1.924	   & 0.01306\\
+    \hline
+     Sex.upon.IntakeSpayed Female 		        &    1.781	   &     1.952	  &  0.3612\\
+    \hline
+     Sex.upon.IntakeUnknown 	     &    -94.18	  &    103.8	   & 6.45E-05\\
+    \hline
+     Age.upon.Intake:Animal.Type.xDog  &  0.05241	 &   0.008667 &	1.49E-09\\
+    \hline
+    
+    
+    
+\end{tabular}
+\end{center}
+
+
+--------------------------------------------------------------
+ Observations   Residual Std. Error   $R^2$    Adjusted $R^2$ 
+-------------- --------------------- -------- ----------------
+    54102              1.233          0.2714       0.2711     
+--------------------------------------------------------------
+
+For the significant coefficients, the interpretation of the coefficients can be used to determine the expected change in stay length for an animal given its characteristics.
+
+### Proportional Hazards
+The proportional hazards coefficients can be interpreted as having no effect if the coefficient is 1, reducing the hazard if the coefficient is less than 1, and increasing the hazard if the coefficient is greater than 1. In this context, the event is adoption and therefore a shorter time to event is preferable. Therefore a coefficient greater than 1 decreases the time in the shelter and a coefficient less than 1 increases the time in the shelter. The coefficients are as follows:
+
+
+```{r}
+pander(summary(res.haz)$coefficients[,c(1,3,5)])
+```
+
+It is possible to analyze the differences within a categorical variable in a plot, where reaching a survival of zero means every animal has been adopted. 
+
+```{r}
+foster_graph
+```
+This plot shows that fostered animals are adopted out at a slower rate than ordinary adoptions and therefore spend more time in the shelter. 
+
+```{r}
+type_graph
+```
+Although within the confidence intervals, cats spent a slightly longer time in the shelter than dogs.
+```{r}
+sex_graph
+```
+This plot shows that no sex has a significant impact on time to adoption. All three of these plots are confirmed by the MLR coefficients; foster animals spend significantly longer, dogs spend slightly less time, and sex is not a significant indicator.
+
+
+# Discussion
+The $R^2_{adj}$ value of 0.2711 for the MLR model indicates that the factors account for only 27% of the variance in the time elapsed. While this may be considered low, the available data and highly subjective nature of choosing a pet for adoption mean that this number is relatively high given these circumstances.
+Both models can be used to identify the effects that influence time to adoption. As verified by both models, as animal age increases, so does time in the shelter. While this is typically accepted by shelters, proving the relationship between animal age and time elapsed further encourages shelters to adopt out older animals, as younger ones are adopted much faster. Additionally, both models confirm that the sex of the animal has almost no effect on time spent in the shelter.
+
+By analyzing the coefficients from both models, it is possible to identify similarities which indicate a factor is significant in practice. Therefore, shelter staff should use this to focus adoptions on animals which have one or more factors that indicate long stay times. 
+
+This data is from only one shelter and therefore may not be representative for other shelters. However, the differing preferences of adopters is a possible future point of research that may explain more about the time spent in the shelter.
+
+Finally, it would be helpful to have more data on each animal, such as weight, size, personality, and ability to get along with other animals. Although these data were not collected by the shelter, it may allow the models to explain more of the variance in the time spent in the shelter until adoption.
+
+
+
+
+
