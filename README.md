@@ -15,6 +15,7 @@ Hi :)
 :  Rice University| Houston, TX | May 2017 
 
 :  *Minor in Statistics*
+
 ***
 
 ## [Projects](Projects.md)
