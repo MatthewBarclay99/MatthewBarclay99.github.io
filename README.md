@@ -1,3 +1,7 @@
+layout: page
+title: "Portfolio"
+permalink: /Home
+
 # Portfolio
 
 ## About
