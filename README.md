@@ -6,11 +6,15 @@
 Hi :)
 
 ### Education
-- Master of Science, Business Analytics | University of California, Riverside (_June 2024_) 
-- Bachelor of Science, Biological Sciences | Rice University (_May 2017_)
+| Master of Science, Business Analytics | University of California, Riverside | June 2024 |
+| Bachelor of Science, Biological Sciences | Rice University | May 2017 |
   + Minor in Statistics
 
 
-### Projects
-
-[LA Parking Tickets](prj/Parking.md)
+### [Projects](Projects.md)
+##### School:
+###### 2023:
+- [Predicting Red Wine Quality](prj/Wine.md)
+###### 2020:
+- [Analyzing Pet Adoptions](prj/Adoptions.md)
+- [Visualizing LA Parking Tickets](prj/Parking.md)
