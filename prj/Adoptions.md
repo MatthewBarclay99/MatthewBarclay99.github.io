@@ -1,5 +1,7 @@
 ---
   layout: page
-  title: "Portfolio"
-  permalink: /Home
+  title: "Adoptions"
+  permalink: /Projects/Adoptions
 ---
+
+# Adoptions
