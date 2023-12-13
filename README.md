@@ -11,4 +11,4 @@ Hi :)
 
 ### Projects
 
-[LA Parking Tickets] (/assets/docs/STAT-405-Final-Project.html)
+[LA Parking Tickets] (MatthewBarclay99.github.io/assets/docs/STAT-405-Final-Project.html)
