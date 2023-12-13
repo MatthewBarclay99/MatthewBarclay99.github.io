@@ -1,4 +1,5 @@
-theme: jekyll-theme-cayman
+#theme: jekyll-theme-cayman
+theme: jekyll-theme-minimal
 title: Matthew Barclay
 logo: /assets/img/IMG_6465.JPG
 description: Bookmark this to keep an eye on my project updates!
