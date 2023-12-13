@@ -1,5 +1,6 @@
 ---
 id: home
+sidebar_label: Home
 ---
 
 # Portfolio
