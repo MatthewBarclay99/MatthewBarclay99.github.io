@@ -7,20 +7,24 @@ sidebar_label: Home
 
 ## About
 Hi :)
-![portrait](assets/img/IMG_6465.JPG)
+<img src="https://MatthewBarclay99.github.io/assets/img/IMG_6465.JPG" width=100 height=100>
 
 ***
 
 ## Education
 **Master of Science, Business Analytics**
-> University of California, Riverside | Riverside, CA
+> University of California, Riverside
+>
+> Riverside, CA
 >
 > June 2024 
 
 **Bachelor of Science, Biological Sciences**
 > *Minor in Statistics*
 >
-> Rice University | Houston, TX
+> Rice University
+>
+> Houston, TX
 > 
 >  May 2017 
 
