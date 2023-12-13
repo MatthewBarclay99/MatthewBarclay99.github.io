@@ -1,5 +1,4 @@
 ---
-layout: page
 title: "Wine"
 permalink: /Projects/Wine
 theme: jekyll-theme-cayman
