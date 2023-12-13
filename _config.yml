@@ -4,3 +4,9 @@ remote_theme: zendesk/jekyll-theme-zendesk-garden@main
 title: Matthew Barclay
 logo: /assets/img/IMG_6465.JPG
 description: Bookmark this to keep an eye on my project updates!
+sidebar:
+ - label: Projects
+   children:
+   - wine
+   - adoptions
+   - parking
