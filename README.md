@@ -1,7 +1,6 @@
 ---
   layout: page
   title: "Portfolio"
-  permalink: /Home
 ---
 
 
@@ -18,4 +17,4 @@ Hi :)
 
 ### Projects
 
-[LA Parking Tickets](https://MatthewBarclay99.github.io/assets/docs/parking/STAT-405-Final-Project.html)
+[LA Parking Tickets](prj/Parking.md)
