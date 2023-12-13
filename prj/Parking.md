@@ -1,7 +1,7 @@
 ---
   title: "Parking"
   permalink: /Projects/Parking
-  theme: jekyll-theme-cayman
+  #theme: jekyll-theme-cayman
 ---
 
 # Parking
