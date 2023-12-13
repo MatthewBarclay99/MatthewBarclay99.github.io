@@ -1,7 +1,7 @@
 ---
 title: "Wine"
 permalink: /Projects/Wine
-theme: jekyll-theme-cayman
+#theme: jekyll-theme-cayman
 ---
 
 
