@@ -26,6 +26,7 @@ I am proud of this report because of the personal connection I had while investi
 
 <img src="https://MatthewBarclay99.github.io/assets/img/Jiji.png" width="50" height="50"/>
 *Jiji*
+
 #### Class:
 
 DSCI 415: Data Science Consulting at Rice University
