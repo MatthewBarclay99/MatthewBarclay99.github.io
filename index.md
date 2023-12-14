@@ -7,7 +7,7 @@ sidebar_label: Home
 
 ## About
 Hi :)
-<img src="https://MatthewBarclay99.github.io/assets/img/IMG_6465.JPG" width=100 height=100>
+<img src="https://MatthewBarclay99.github.io/assets/img/Headshot.JPG" width=100 height=100>
 
 ***
 
