@@ -13,7 +13,7 @@ sidebar_label: Home
 
 Coming soon...
 
-### School:
+### Academic:
 ##### 2023
 🍷 [Predicting Red Wine Quality](prj/Wine.md)
 
