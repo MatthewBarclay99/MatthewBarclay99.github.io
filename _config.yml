@@ -5,6 +5,7 @@ title: Matthew Barclay
 #description: Bookmark this to keep an eye on my project updates!
 sidebar:
  - home
+ - About
  - label: Projects
    children:
    - wine
