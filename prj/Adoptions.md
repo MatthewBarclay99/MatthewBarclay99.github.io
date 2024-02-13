@@ -1,5 +1,5 @@
 ---
-  title: "Adoptions"
+  title: "Pet adoptions"
   permalink: /Projects/Adoptions
   #theme: jekyll-theme-cayman
   id: adoptions
@@ -7,7 +7,7 @@
   next_page: parking
 ---
 
-# Adoptions
+# Pet adoptions
 
 ## Links
 
