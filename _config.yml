@@ -6,7 +6,10 @@ title: Matthew Barclay
 sidebar:
  - home
  #- about
- - label: Projects
+ #- label: Personal projects
+   #children:
+   #- 
+ - label: Academic projects
    children:
    - wine
    - adoptions
