@@ -1,0 +1,694 @@
+---
+title: "Airbnb Price Analysis STAT232 Final Report"
+author: 
+- "Matthew Barclay"
+- "Riley Baumgarten"
+- "Megan Dang"
+- "Arvind Kamboh"
+
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(maps)
+library(caret)
+library(splitTools)
+library(ggplot2)
+library(glmnet)
+library(sf)
+library(ggpubr)
+library(httr)
+library(gridExtra)
+library(huxtable)
+```
+
+
+# Introduction
+
+This report delves into an analysis of Airbnb with the aim of understanding the factors that impact pricing. Airbnb, a leading platform in the hospitality industry, offers customers the opportunity to book, list, or discover places to stay worldwide. Understanding the data behind Airbnb can provide key insights into customer preferences, market trends, and business opportunities. The dataset used in this analysis is from Kaggle and comprises information gathered from AirBnB listings. It contains various attributes related to listings, such as location, property type, price, availability, and reviews. This data offers a comprehensive view of the Airbnb ecosystem and can be leveraged to uncover patterns and trends within the platform. Through the analysis of the Airbnb data, we aim to address several key business questions: 
+
++ Which property types are in the highest demand among travelers? 
+
++ How do prices vary across different locations and property types? 
+
+By answering these questions, Airbnb property owners can make informed decisions regarding pricing strategies, and property management to optimize their performance on the Airbnb platform.
+
+Data Source: https://www.kaggle.com/datasets/lovishbansal123/airbnb-data/data 
+
+# Exploratory Data Analysis
+
+## Data Cleaning
+
+The data had a usable format for all variables except *amenities* which was a comma-separated list within each row. We converted this list to encoded rows for each unique value in the amenities lists. This resulted in about 120 new columns in our data frame. To simplify the data, we combined similar amenities into broad categories. This reduced the number of amenities columns to 28, with each column representing the percentage of amenities present in the listing for each listing. This transformation changes the interpretation of the predictors from binary categorical to a continuous scale where adding additional amenities in the predictor group will increase or decrease the log price by that coefficient times the percent of amenities added in the group.
+
+
+```{r Cleaning, eval=FALSE}
+myData <- read.csv("Airbnb_Data.csv")
+myData <- select(myData, !c("id", 
+                            ("description":"host_since"),
+                            "last_review",
+                            "name",
+                            "neighbourhood",
+                            "thumbnail_url"
+                            )) 
+myData <- na.omit(myData)
+start_time <- Sys.time()
+amenities <- strsplit(myData$amenities,",") %>% (function(x){
+    s1 <- c()
+    df <- data.frame(row = c(1:length(x)))
+  for (i in 1:length(x)) {
+    # loop over all lists
+    n <- length(x[[i]])
+    s2 <- c()
+    for (j in 1:n) {
+      # within list, remove special characters
+      new_str <- str_replace_all(x[[i]][j],regex("\\W+"),"")
+      s2[j] <- ifelse(new_str=="","_Null",new_str)
+    }
+    for (k in 1:length(s2)) {
+      #Assign 1 at amenity column
+      df[i,s2[k]] <- 1
+    }}
+    return(df)
+}
+# Coded beautifully and inefficiently by Matt Barclay :)
+)
+amenities[is.na(amenities)] <- 0
+amenities <- select(amenities, !c("translationmissingenhosting_amenity_49",
+                                  "_Null", "row",
+                                  "translationmissingenhosting_amenity_50",
+                                  "Other")) 
+                    #remove index, null, and translation error
+#names(amenities)
+saveRDS(amenities, "amenities.rds")
+end_time <- Sys.time()
+end_time - start_time
+
+#colSums(amenities)
+myData <- select(myData, !"amenities") %>% mutate_if(is.character,as.factor)
+myData <- cbind(myData,amenities)
+rm(amenities)
+myData <- myData %>%
+mutate(DigitalEntertainment = rowMeans(select(.,TV,CableTV, Gameconsole))) %>%
+  select(-c(TV,CableTV,Gameconsole)) %>% 
+  
+mutate(Internet = rowMeans(select(.,WirelessInternet, Internet, Pocketwifi, Ethernetconnection,Laptopfriendlyworkspace))) %>%
+  select(-c(WirelessInternet, Pocketwifi, Ethernetconnection,Laptopfriendlyworkspace)) %>%
+  
+mutate(Services = rowMeans(select(.,Doorman,`24hourcheckin`,SelfCheckIn,Hostgreetsyou,Buzzerwirelessintercom,DoormanEntry,Luggagedropoffallowed,Breakfast))) %>%
+  select(-c(Doorman,`24hourcheckin`,SelfCheckIn,Hostgreetsyou,Buzzerwirelessintercom,DoormanEntry,Luggagedropoffallowed,Breakfast)) %>% 
+  
+  mutate(Pets = rowMeans(select(.,Dogs,Cats,Otherpets,Petsallowed,Petsliveonthisproperty))) %>%
+  select(-c(Dogs,Cats,Otherpets,Petsallowed,Petsliveonthisproperty)) %>% 
+  
+  mutate(Children = rowMeans(select(.,Childrensbooksandtoys,Highchair,
+Childrensdinnerware,
+Changingtable,
+Babymonitor,
+Babybath,
+Familykidfriendly,
+Babysitterrecommendations,
+PacknPlaytravelcrib,
+Outletcovers,Windowguards,Tablecornerguards,Crib,Fireplaceguards,Stairgates
+))) %>%
+  select(-c(Childrensbooksandtoys,Highchair,
+Childrensdinnerware,
+Changingtable,
+Babymonitor,
+Babybath,
+Familykidfriendly,
+Babysitterrecommendations,
+PacknPlaytravelcrib,
+Outletcovers,Windowguards,Tablecornerguards,Crib,Fireplaceguards,Stairgates
+)) %>% 
+  
+    mutate(Laundry = rowMeans(select(.,WasherDryer, Washer, Dryer, Iron,Hangers))) %>%
+  select(-c(WasherDryer, Washer, Dryer, Iron,Hangers)) %>% 
+  
+    mutate(Bathroom = rowMeans(select(.,Hotwater,Bodysoap,Handsoap,Bathtowel,Handorpapertowel,Toiletpaper,Bathtub,Shampoo,Hairdryer))) %>%
+  select(-c(Hotwater,Bodysoap,Handsoap,Bathtowel,Handorpapertowel,Toiletpaper,Bathtub,Shampoo,Hairdryer)) %>% 
+  
+    mutate(FullKitchen = rowMeans(select(.,Kitchen, Cookingbasics, Oven, Stove, Dishwasher, Dishesandsilverware, Refrigerator ))) %>%
+  select(-c(Kitchen, Cookingbasics, Oven, Stove, Dishwasher, Dishesandsilverware, Refrigerator )) %>% 
+  
+    mutate(ExtraKitchen = rowMeans(select(.,Coffeemaker, Microwave, Hotwaterkettle))) %>%
+  select(-c(Coffeemaker, Microwave, Hotwaterkettle)) %>% 
+  
+    mutate(Bedroom = rowMeans(select(.,Firmmattress,Firmmatress,Bedlinens,Extrapillowsandblankets,Roomdarkeningshades,Roomdarkeningshades))) %>%
+  select(-c(Firmmattress,Firmmatress,Bedlinens,Extrapillowsandblankets,Roomdarkeningshades,Roomdarkeningshades)) %>% 
+  
+    mutate(Accessibility = rowMeans(select(.,Singlelevelhome,Wheelchairaccessible, Stepfreeaccess, Wideclearancetobed, Accessibleheightbed, Widedoorway, Accessibleheighttoilet, Wideentryway, Widehallwayclearance, smoothpathwaytofrontdoor, Welllitpathtoentrance, Wideclearancetoshowerandtoilet, Rollinshowerwithchair, Disabledparkingspot, Bathtubwithshowerchair, Fixedgrabbarsforshowertoilet, Wideclearancetoshowertoilet, Rollinshowerwithchair, Pathtoentrancelitatnight, Flatsmoothpathwaytofrontdoor, Grabrailsforshowerandtoilet, Wideclearancetoshowertoilet,Handheldshowerhead, Elevator, Groundflooraccess, Elevatorinbuilding))) %>%
+  select(-c(Singlelevelhome,Wheelchairaccessible, Stepfreeaccess, Wideclearancetobed, Accessibleheightbed, Widedoorway, Accessibleheighttoilet, Wideentryway, Widehallwayclearance, smoothpathwaytofrontdoor, Welllitpathtoentrance, Wideclearancetoshowerandtoilet, Rollinshowerwithchair, Disabledparkingspot, Bathtubwithshowerchair, Fixedgrabbarsforshowertoilet, Wideclearancetoshowertoilet, Rollinshowerwithchair, Pathtoentrancelitatnight, Flatsmoothpathwaytofrontdoor, Grabrailsforshowerandtoilet, Wideclearancetoshowertoilet,Handheldshowerhead, Elevator, Groundflooraccess, Elevatorinbuilding)) %>% 
+  
+  mutate(LocationFeatures = rowMeans(select(.,Waterfront,Beachfront,Lakeaccess,SkiinSkiout,Beachessentials,Gardenorbackyard,BBQgrill,Patioorbalcony))) %>%
+  select(-c(Waterfront,Beachfront,Lakeaccess,SkiinSkiout,Beachessentials,Gardenorbackyard,BBQgrill,Patioorbalcony)) %>% 
+  
+  mutate(Parking = rowMeans(select(.,Paidparkingoffpremises,Freeparkingonstreet,Freeparkingonpremises,EVcharger))) %>%
+  select(-c(Paidparkingoffpremises,Freeparkingonstreet,Freeparkingonpremises,EVcharger)) %>% 
+  
+  mutate(Emergency = rowMeans(select(.,Smokedetector, Fireextinguisher, Carbonmonoxidedetector, Firstaidkit))) %>%
+  select(-c(Smokedetector, Fireextinguisher, Carbonmonoxidedetector, Firstaidkit)) %>% 
+  
+  mutate(Safety = rowMeans(select(.,Safetycard, Lockonbedroomdoor, Lockbox,Keypad,Smartlock))) %>%
+  select(-c(Safetycard, Lockonbedroomdoor, Lockbox,Keypad,Smartlock))%>% 
+  
+mutate(Privacy = rowMeans(select(.,Privateentrance,Privatelivingroom,Privatebathroom))) %>%
+  select(-c(Privateentrance,Privatelivingroom,Privatebathroom))
+
+saveRDS(myData, "clean_data.rds")
+```
+
+```{r LoadData}
+myData <- readRDS("clean_data.rds")
+#names(select(myData, (log_price:beds)))
+#amenities_names <- names(select(myData, -(log_price:beds)))
+
+#colSums(select(myData, amenities_names))
+
+```
+
+
+## Research Question
+
+> What are the factors influencing Airbnb nightly prices?
+
+## Data Visualization
+
+```{r PropertyType}
+gg <- ggplot(data=myData, mapping = aes(x=log_price)) +
+theme(legend.position = "bottom") + labs(x="Log of Price",y="Number of Airbnbs", fill=" Property Type")
+plot1 <- gg + geom_histogram(aes(fill=property_type), binwidth=0.5) 
+plot2 <- gg + geom_freqpoly(aes(color=property_type), binwidth=0.5)
+ggarrange(plot1, plot2, ncol=2, common.legend = TRUE, legend = "bottom")
+```
+
+
+These plots show the distribution of property types against price. We can see that the most popular type of property is apartments. The distribution of property type by price does not appear to have any distinct patterns with all property types having similar price distributions.
+
+
+```{r RoomType}
+gg <- ggplot(data=myData, mapping = aes(x=log_price)) +
+theme(legend.position = "bottom")+labs(x="Log of Price",y="Number of Airbnbs", fill="Room Type")
+plot1 <- gg + geom_histogram(aes(fill=room_type), binwidth=0.5)
+plot2 <- gg + geom_freqpoly(aes(color=room_type), binwidth=0.5)
+ggarrange(plot1, plot2, ncol=2, common.legend = TRUE, legend = "bottom")
+```
+
+These plots show the distribution of room type across prices. It shows that entire apartments/homes are most prevalent and command a higher nightly rate, followed by private rooms and shared rooms being the least common and cheapest. 
+
+```{r BedType}
+gg <- ggplot(data=myData, mapping = aes(x=log_price)) +
+theme(legend.position = "bottom")+labs(x="Log of Price",y="Number of Airbnbs", fill = "Bed Type")
+plot1 <- gg + geom_histogram(aes(fill=bed_type), binwidth=0.5)
+plot2 <- gg + geom_freqpoly(aes(color=bed_type), binwidth=0.5)
+ggarrange(plot1, plot2, ncol=2, common.legend = TRUE, legend = "bottom")
+```
+
+
+These plots show that real beds are most common in Airbnbs. There does not appear to be a relationship between the bed type and price which was unexpected, as we believed that sleeping on couches and airbeds would drive down the nightly prices.
+
+```{r PropTypePrice}
+ggplot(data = myData) +
+geom_boxplot(mapping = aes(x = log_price, y = property_type))+
+               labs(x="Price",y="Property Type",title = "Price Ranges of Each Property Type")
+```
+
+This boxplot shows the range of price for each property type. While most property types have similar distributions, notable exceptions are tents, hostels, and dorms which have much lower prices in general. With these property types being the least luxurious and often shared with many other guests, the lower pricing is reasonable.
+
+```{r numCity}
+ggplot(data = myData, aes(x = city)) +
+  geom_bar(mapping=aes(fill = property_type)) +
+  labs(x = "City", y = "Number of Airbnbs", title = "Number of Airbnbs in Each City") +
+  geom_text(stat = 'count', aes(label = after_stat(count)), size = 4, vjust = -0.2)
+```
+
+This bar plot shows the number of Airbnbs in each city. NYC has the most Airbnbs, with LA closely following behind.
+
+```{r RatingsPrice}
+ggplot(myData, aes(x = myData$review_scores_rating, y = myData$log_price)) +
+  geom_point() +
+  geom_abline(intercept = 2, slope = 3, color = "red", size = 1.2, linetype = "dashed") +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  labs(title = "Reviews of AirBnB locations vs Price",
+       x = "Ratings", y = "Price") +
+  theme_minimal()
+```
+
+This scatter plot shows the relationship between the ratings the AirBnB locations received and how it relates to price. From the plot we can see a linear relationship and that the lower-rated locations have lower prices. Price steadily increases as the reviews get higher. 
+
+```{r AvgCityPrice}
+city_means <- aggregate(log_price ~ city, data = myData, FUN = mean)
+
+ggplot(data = city_means, aes(x = city, y = log_price, fill = city)) +
+  geom_bar(stat = "identity", color = "black") +
+  labs(title = "Mean Log Price of AirBnb Listings by City",
+       x = "City", y = "Mean Log Price")
+```
+
+```{r BoxCityPrice}
+ggplot(data = myData, aes(x = city, y = log_price, fill = city)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Log Price of AirBnb Listings by City",
+       x = "City", y = "Log Price")
+```
+
+This boxplot shows the relationship between the AirBnB locations based on city and how it relates to price. Though the average price is similar across the cities, San Francisco has the highest price while Chicago has the lowest, which aligns with higher cost of living in coastal cities.
+
+```{r bedroomsPrice}
+ggplot(data = myData, aes(x = bedrooms, y = log_price, color = bedrooms)) +
+  geom_point() +
+  labs(title = "Scatterplot of Price against Number of Bedrooms",
+       x = "Number of Bedrooms", y = "Price")
+```
+
+This scatterplot shows the relationship between the number of bedrooms in an AirBnB location and the price. There appears to be diminishing returns on how high the price will be increased as the number of bedrooms increases as there is a plateau after about 7 bedrooms.
+
+```{r USAMap}
+# USA map data
+usa_map <- map_data("state")
+
+# map of the United States
+ggplot() +
+  geom_map(data = usa_map, map = usa_map,
+           aes(x = long, y = lat, map_id = region),
+           fill = "gray33", color = "white") +
+  
+  # city points
+  geom_point(data = myData, aes(x = longitude, y = latitude, color = city, size = log_price), alpha = 0.05) +
+
+  labs(title = "Map of AirBnB City Points")
+```
+
+This map shows the points across the US where the airbnb locations are based on the dataset. The size of the points are adjusted by the price of the airbnb locations.
+
+
+```{r NewYork}
+sf_use_s2(FALSE) #https://github.com/r-spatial/sf/issues/1762
+
+# code source: https://www.andrewheiss.com/blog/2023/07/28/gradient-map-fills-r-sf/
+#maps https://github.com/blackmad/neighborhoods/tree/master
+
+
+map_theme <- ggplot() + 
+          theme(axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank(),
+          plot.caption = element_text(hjust=0.5, size=rel(1.2)),
+          legend.key.width=rel(5)) +
+          scale_fill_continuous(type="viridis")
+
+           
+
+r <- GET('http://data.beta.nyc//dataset/0ff93d2d-90ba-457c-9f7e-39e47bf2ac5f/resource/35dd04fb-81b3-479b-a074-a27a37888ce7/download/d085e2f8d0b54d4590b1e7d1f35594c1pediacitiesnycneighborhoods.geojson')
+nyc_neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "NYC"
+nyc_airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+nyc_airbnbs <- st_as_sf(nyc_airbnbs, coords = c(1:2))
+st_crs(nyc_airbnbs) <- 4326
+
+neighborhood_airbnbs <- nyc_neighborhoods %>% 
+  st_join(nyc_airbnbs) %>% 
+  group_by(neighborhood) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+NYC_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price)) + labs(caption = city_name)
+NYC_map_count <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ labs(caption = city_name)
+  
+
+```
+
+
+```{r LA}
+r <- GET('https://raw.githubusercontent.com/blackmad/neighborhoods/master/los-angeles-county.geojson')
+neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "LA"
+airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+airbnbs <- st_as_sf(airbnbs, coords = c(1:2))
+st_crs(airbnbs) <- 4326
+
+neighborhood_airbnbs <- neighborhoods %>% 
+  st_join(airbnbs) %>% 
+  group_by(name) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+
+LA_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price))+ labs(caption = city_name)
+LA_map_count <- map_theme+ 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ labs(caption = city_name)
+```
+
+
+```{r SF}
+r <- GET('https://raw.githubusercontent.com/blackmad/neighborhoods/master/san-francisco.geojson')
+neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "SF"
+airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+airbnbs <- st_as_sf(airbnbs, coords = c(1:2))
+st_crs(airbnbs) <- 4326
+
+neighborhood_airbnbs <- neighborhoods %>% 
+  st_join(airbnbs) %>% 
+  group_by(name) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+
+SF_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price))+ labs(caption = city_name)
+SF_map_count <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ labs(caption = city_name)
+```
+
+
+```{r DC}
+r <- GET('https://raw.githubusercontent.com/blackmad/neighborhoods/master/washington.geojson')
+neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "DC"
+airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+airbnbs <- st_as_sf(airbnbs, coords = c(1:2))
+st_crs(airbnbs) <- 4326
+
+neighborhood_airbnbs <- neighborhoods %>% 
+  st_join(airbnbs) %>% 
+  group_by(name) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+
+DC_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price))+ labs(caption = city_name)
+DC_map_count <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ labs(caption = city_name)
+```
+
+
+```{r Chicago}
+r <- GET('https://raw.githubusercontent.com/blackmad/neighborhoods/master/chicago.geojson')
+neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "Chicago"
+airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+airbnbs <- st_as_sf(airbnbs, coords = c(1:2))
+st_crs(airbnbs) <- 4326
+
+neighborhood_airbnbs <- neighborhoods %>% 
+  st_join(airbnbs) %>% 
+  group_by(name) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+
+Chi_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price))+ labs(caption = city_name)
+Chi_map_count <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ labs(caption = city_name)
+```
+
+```{r Boston}
+r <- GET('https://raw.githubusercontent.com/blackmad/neighborhoods/master/boston.geojson')
+neighborhoods <- st_read(r, quiet=TRUE)
+
+city_name <- "Boston"
+airbnbs <- filter(myData, city==city_name) %>% select(lng = longitude,lat = latitude, log_price)
+airbnbs <- st_as_sf(airbnbs, coords = c(1:2))
+st_crs(airbnbs) <- 4326
+
+neighborhood_airbnbs <- neighborhoods %>% 
+  st_join(airbnbs) %>% 
+  group_by(name) %>% mutate(log_price = replace_na(log_price,0)) %>% 
+  summarise(avg_price = mean(exp(log_price)), number = n())
+
+
+Bos_map_price <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = avg_price))+ 
+  labs(caption = city_name, fill = "Average Price ($)")
+Bos_map_count <- map_theme + 
+  geom_sf(data = neighborhood_airbnbs, aes(fill = number))+ 
+  labs(caption = city_name, fill = "Number of Units")
+```
+
+
+```{r Maps, fig.height=5, fig.width=7}
+ggarrange(Bos_map_price,Chi_map_price,DC_map_price,SF_map_price,LA_map_price,NYC_map_price, 
+          ncol=3, nrow = 2, common.legend = TRUE, legend = "bottom") %>% 
+annotate_figure(top=text_grob("Average Nightly Price for Airbnbs Across Neighborhoods", size = 15),
+                bottom=text_grob("Data: Kaggle - Airbnb_Data     ",
+                                 hjust = 1, x = 1, face = "italic", size = 6))
+
+ggarrange(Bos_map_count,Chi_map_count,DC_map_count,SF_map_count,LA_map_count,NYC_map_count, 
+          ncol=3, nrow = 2, common.legend = TRUE, legend = "bottom") %>% 
+  annotate_figure(top=text_grob("Number of Airbnbs Across Neighborhoods", size = 15),
+                bottom=text_grob("Data: Kaggle - Airbnb_Data     ",
+                                 hjust = 1, x = 1, face = "italic", size = 6))
+```
+
+While nightly rates differ between cities, they also differ within the city. While we will not use this neighborhood-level data in our modeling, it is useful to visualize where the most Airbnbs are located and where the average prices are distributed. In each city, the majority of Airbnbs appear to be located in just one neighborhood but the average prices in that neighborhood are lower. The highest average prices appear either along the beach or in the city center, where we would expect to see the higher prices to be located.
+
+
+
+# Models
+
+## Multiple Linear Regression
+
+```{r LM}
+model1 <- lm(log_price ~.-zipcode-longitude-latitude, data = myData)
+#summary(model1)
+par(mfrow=c(2,2))
+plot(model1)
+```
+Here is a simple linear regression model, we excluded zip code, longitude and latitude because of their inherent unimportance. 
+
+## Cross-Validated MLR
+```{r CVMLR}
+set.seed(254)  
+myData1 <- select(myData, -c("zipcode", "longitude", "latitude"))
+
+ir <- myData1[, "property_type", drop = FALSE]  # Ensure it's a data frame, not a vector
+
+y <- multi_strata(ir, k = 5)
+
+inds <- partition(
+  y, p = c(train = 0.8, test = 0.2), split_into_list = FALSE
+)
+trainData <- myData1[inds == 'train', ]
+testData <- myData1[inds == 'test', ]
+
+
+```
+
+```{r MLRtest, out.width="50%"}
+
+
+MLR_model <- lm(log_price ~., data = trainData)
+
+
+predictions <- predict(MLR_model, newdata = testData)
+
+
+plot(testData$log_price, predictions,
+	xlab = "Actual Values", ylab = "Predicted Values",
+	main = "Actual vs. Predicted Values")
+
+
+abline(0, 1, col = "red")
+
+#summary(MLR_model)
+
+```
+
+We then created a train and test set for multilinear regression with a 80 train 20 test partitioning. In this model, none of the variables were removed and we see a very similar R^2 from the simple model which is a good sign we are not overfitting. 
+
+## MLR- Removed insignificant predictors
+
+```{r MLRinsig}
+edited_model <- lm(log_price ~.-zipcode-longitude-latitude-Children-LocationFeatures-Pets-cleaning_fee-Cleaningbeforecheckout, data = myData)
+#summary(edited_model)
+par(mfrow=c(2,2))
+plot(edited_model)
+
+huxreg("MLR" = model1, 
+       "Cross-Validated MLR" = MLR_model, 
+       "Reduced MLR" = edited_model,
+       error_pos = "same",
+       error_format = "({p.value})")
+
+
+```
+
+```{r RSE}
+rse <- summary(edited_model)$sigma
+avg_sales <- mean(myData$log_price)
+error_rate <- rse / avg_sales
+cat("The percentage of prediction error is", error_rate*100,"%")
+```
+
+After conducting a multiple linear regression (MLR) analysis, we observed that the variables zipcode, longitude, latitude, children, extrakitchen, parking, safety, accessibility, locationfeatures, laundry, pets and bathroom were not statistically significant for our model. Despite this, our initial model yielded a satisfactory adjusted R-squared value of 0.6332, indicating a good fit.
+
+To optimize our model, we excluded these insignificant factors and re-ran the linear regression analysis. The resulting model achieved an adjusted R-squared value of 0.634, slightly higher than the previous model. Additionally, upon examining the residual plot, we observed a close-to-zero line, indicating that our model has a decent fit and captures the variability in the data well.
+
+While removing non-significant variables led to a minor decrease in the adjusted R-squared value, the residual plot supports the adequacy of our model's fit, suggesting that our revised model remains a reasonable choice for predicting the response variable. Additionally, we calculated the RSE (0.4) and percentage of prediction error which was 8.53%. 
+
+# AIC
+
+```{r AIC, results='asis'}
+backwardModel1 <- step(model1, trace = 0)
+backwardModel1$anova
+```
+After conducting a backward step to confirm the removal of appropriate variables, we identified that "Pets," "cleaning_fee," "Children," and "Cleaningbeforecheckout" were to be removed from the model. Upon analyzing the AIC values, we observed that all these variables contributed negatively, indicating a reduction in the rate of information loss. This implies that excluding these variables leads to a more efficient model with improved information retention.
+
+# Lasso Regression
+
+```{r Lasso}
+# Remove the target variable 'cnt' and the excluded variables from the dataset
+
+# Create the design matrix 'x' and the response vector 'y'
+x <- model.matrix(log_price ~ ., data = myData1)[, -myData1$log_price]  # Exclude the intercept column
+y <- myData1$log_price
+```
+
+```{r LassoSplit}
+set.seed(1)
+train <- sample(1:nrow(x), nrow(x) / 2)
+test <- (-train)
+y.test <- y[test]
+```
+```{r LassoCV, out.width="50%"}
+
+cv.log_price <- cv.glmnet(x[train, ], y[train], alpha = 0)
+plot(cv.log_price)
+```
+
+```{r LassoTrain, out.width="50%"}
+grid <- 10^seq(10, -2, length = 100)
+lasso.mod <- glmnet(x[train, ], y[train], alpha = 1,lambda = grid)
+plot(lasso.mod)
+```
+```{r out.width="50%"}
+set.seed(1)
+cv.out <- cv.glmnet(x[train, ], y[train], alpha = 1)
+plot(cv.out)
+```
+
+```{r LassoLamda}
+bestlam <- cv.log_price$lambda.min
+paste("Best Lamda: ", bestlam)
+```
+
+```{r Ridge}
+ridge.mod <- glmnet(x[train, ], y[train], alpha = 0,
+           		 lambda = bestlam, thresh = 1e-12)
+ridge.pred <- predict(ridge.mod, newx = x[test, ])
+
+mse <- mean((ridge.pred - y.test)^2)
+
+rmse <- sqrt(mse)
+
+paste("RMSE: ", rmse)
+```
+```{r RidgeCoeff, out.width="50%"}
+dontWorryaboutIt <- glmnet(x, y, alpha = 0)
+coeff_pred <- predict(dontWorryaboutIt, type = "coefficients", s = bestlam)[1:77, ]
+summary(coeff_pred)
+coeff_pred
+```
+```{r RidgeCoefPlot}
+options(repr.plot.width=8, repr.plot.height=6)
+
+par(mar = c(5, 5, 4, 2) + 0.1)
+
+plot(coeff_pred, xlab = "Coefficients", ylab = "Values", main = "Coefficient Plot")
+
+text(seq_along(coeff_pred), coeff_pred, labels = names(coeff_pred), pos = 4, cex = 0.3, adj = c(0, -0.3), srt = 45)
+
+```
+
+Lasso selected an optimal lambda value of 0.0388379108211007, indicating the level of regularization applied to the model. The RMSE of approximately 0.41 indicates that the model's predictions closely align with the actual values on average, which is a positive sign of the model's effectiveness. Some variables like "Accessibility," "DigitalEntertainment," "Pets," and "Children" have significant coefficients, indicating a strong influence on the target variable. Conversely, variables such as "Cleaningbeforecheckout," "Smokingallowed," and "Flat" have coefficients close to zero, suggesting a minimal impact on the target variable according to Lasso regularization. The model's combination of a low RMSE and informative coefficients signifies that the Lasso-regularized model is performing well, capturing meaningful patterns in the data while mitigating overfitting.
+
+
+# Conclusion
+
+> Which property types are in the highest demand among travelers? 
+
+Amongst travelers, apartments are in the highest demand among travelers across all the cities, with houses being second in demand. 
+
+> How do prices vary across different locations and property types? 
+
+Across the different cities, we notice that SF has the highest mean log price but on average, all the cities have around the same mean log price. 
+
+The multiple linear regression (MLR) model with cross-validation shows an intercept of 3.911 with a high statistical significance (p < 0.001). Among the property types, Bed & Breakfast, Boat, Boutique hotel, Castle, Condominium, Island, Loft, Timeshare, Tipi, and Train are statistically significant predictors of prices with positive coefficient values, while Dorm, Camper/RV, House, Hut, and Hostel had negative coefficients. Island, Tipi, Train, Castle, and boat had the largest coefficients out of all property types, which indicates that more rare property types like these can command a higher nightly price by offering a unique experience to guests. 
+
+Room types such as Private and Shared also have significant negative coefficients, indicating these factors reduce the price. The model achieves an R-squared value of around 0.63, indicating a moderate level of predictive power.
+
+## Recommendations
+
+In order to command the highest nightly prices, Airbnb owners should prioritize unique properties that offer whole property privacy. The properties should have a large amount of bedrooms and be able to accommodate many guests in order to charge as much as possible per night. They should offer amenities such as pools and hottubs, digital entertainment, and accessibility features. Finally, the property should be in San Francisco and have high review ratings. Utilizing these features, Airbnb owners will be able to charge the highest nightly rate according to our models.
+
+
+
+# Appendix
+
+## Cleaned Columns:
+
+DigitalEntertainment:
+TV,CableTV, Gameconsole
+
+Internet:
+WirelessInternet, Internet, Pocketwifi, Ethernetconnection, Laptopfriendlyworkspace
+
+Services:
+Doorman,24hourcheckin,SelfCheckIn,Hostgreetsyou,Buzzerwirelessintercom,DoormanEntry,Luggagedropoffallowed
+
+Pets:
+Dogs,Cats,Otherpets,Petsallowed,Petsliveonthisproperty
+
+Children:
+Childrensbooksandtoys,Childrensdinnerware,Changingtable,Babymonitor,Babybath, Highchair, Familykidfriendly,Babysitterrecommendations,PacknPlaytravelcrib, Outletcovers,Windowguards,Tablecornerguards,Crib,Fireplaceguards,Stairgates
+
+Laundry:
+WasherDryer, Washer, Dryer, Iron, Hangers
+
+Bathroom:
+Hotwater,Bodysoap,Handsoap,Bathtowel,Handorpapertowel,Toiletpaper,Bathtub,Shampoo,Hairdryer
+
+FullKitchen:
+Kitchen, Cookingbasics, Oven, Stove, Dishwasher, Dishesandsilverware, Refrigerator 
+
+ExtraKitchen:Coffeemaker, Microwave, Hotwaterkettle
+
+Bedroom:
+Firmmattress,Firmmatress,Bedlinens,Extrapillowsandblankets,Roomdarkeningshades,Roomdarkeningshades
+
+Accessibility:
+Wheelchairaccessible, Stepfreeaccess, Wideclearancetobed, Accessibleheightbed, Widedoorway, Accessibleheighttoilet, Wideentryway, Widehallwayclearance, smoothpathwaytofrontdoor, Welllitpathtoentrance, Wideclearancetoshowerandtoilet, Rollinshowerwithchair, Disabledparkingspot, Bathtubwithshowerchair, Fixedgrabbarsforshowertoilet, Wideclearancetoshowertoilet, Rollinshowerwithchair, Pathtoentrancelitatnight, Flatsmoothpathwaytofrontdoor, Grabrailsforshowerandtoilet, Wideclearancetoshowertoilet,Handheldshowerhead, Elevator, Groundflooraccess, Elevatorinbuilding
+
+LocationFeatures:
+Waterfront,Beachfront,Lakeaccess,SkiinSkiout,Beachessentials,Gardenorbackyard,BBQgrill,Patioorbalcony
+
+Parking:
+Paidparkingoffpremises,Freeparkingonstreet,Freeparkingonpremises,EVcharger
+
+Emergency:
+Smokedetector, Fireextinguisher, Carbonmonoxidedetector, Firstaidkit
+
+Safety:
+Safetycard, Lockonbedroomdoor, Lockbox,Keypad, Smartlock
+
+Privacy:
+Privatelivingroom,Privateentrance,Privatebathroom
+
+
+
+
+
+
+

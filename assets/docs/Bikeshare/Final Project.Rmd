@@ -1,0 +1,644 @@
+---
+title: "Evaluating Bike Share Ridership"
+subtitle: "MGT286A Final Project"
+author: 
+- "Matthew Barclay"
+- "Riley Baumgarten"
+- "Arvind Kamboh"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+library(neuralnet)
+library(gridExtra)
+library(randomForest)
+library(caret)
+library(tidyverse)
+library(dplyr)
+library(glmnet)
+library(ggpubr)
+```
+
+# Contributions
+
+***Matthew Barclay***: 
+Cleaned data, created ridership distribution visualizations and neural network models, and wrote conclusions.
+
+***Riley Baumgarten***: Simple Linear regression, Trained Multilinear Regression, Akaike Information Criterion (AIC), Lasso Regression, Random Forests, and above model descriptions. 
+
+***Arvind Kamboh***: 
+Formatted powerpoint, wrote data descriptions, summary and research questions. Created Polynomial Regression model and Scatter Plot models: Humidity vs Bike Riders, Wind Speed vs Bike Riders, and Temperature vs Bike Riders. 
+
+# About the Data
+
+This dataset contains daily and hourly ridership levels on the Washington, DC Capital Bikeshare with weather information and additional context about the date. The dataset was obtained from the UCI machine learning repository. The daily dataset comprises 731 observations with 13 predictor variables. The dataset is complete, containing no missing values, which ensures the reliability of analyses conducted. The primary predictor value within this dataset is the number of bike riders, offering insights into the trends and patterns of bike sharing over the observed period. With a comprehensive set of variables, ranging from weather conditions to temporal factors, this dataset presents a robust foundation for predictive modeling and exploratory analysis in the realm of bike sharing systems.
+
+# Research Question
+
+What factors influence when people choose to borrow bikes for riding?
+
+## Data Source
+
+The dataframes are made up of the following columns:
+
+       
+- instant: record index (num)
+- dteday: date (chr)
+- season: season (1:spring, 2:summer, 3:fall, 4:winter) (num)
+- yr: year (0: 2011, 1:2012) (num)
+- mnth: month ( 1 to 12) (num)
+- hr: hour (0 to 23) (num)
+- holiday: weather day is holiday or not  (num)
+- weekday: day of the week
+- workingday: if day is neither weekend nor holiday is 1, otherwise is 0. (num)
++ weathersit: (num)
+    - 1: Clear, Few clouds, Partly cloudy, Partly cloudy
+    - 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist
+    - 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds
+    - 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog
+- temp: Normalized temperature in Celsius. The values are divided to 41 (max) (num)
+- atemp: Normalized feeling temperature in Celsius. The values are divided to 50 (max) (num)
+- hum: Normalized humidity. The values are divided to 100 (max) (num)
+- windspeed: Normalized wind speed. The values are divided to 67 (max) (num)
+- casual: count of casual users (num)
+- registered: count of registered users (num)
+- cnt: count of total rental bikes including both casual and registered (num)
+
+
+```{r Load Data}
+myData_hourly <- read.csv("bike+sharing+dataset/hour.csv")
+myData_daily <- read.csv("bike+sharing+dataset/day.csv")
+```
+
+## Data Cleaning
+
+The dataset had no missing values, so the only cleaning needed was converting the date character to date objects and the categorical variables from numeric to factors.
+
+```{r Data Cleaning}
+myData_daily$dteday <- as.Date(myData_daily$dteday)
+myData_hourly$dteday <- as.Date(myData_hourly$dteday)
+myData_daily$season <- as.factor(myData_daily$season)
+myData_hourly$season <- as.factor(myData_hourly$season)
+
+myData_daily$yr <- as.factor(myData_daily$yr)
+myData_hourly$yr <- as.factor(myData_hourly$yr)
+
+myData_daily$mnth <- as.factor(myData_daily$mnth)
+myData_hourly$mnth <- as.factor(myData_hourly$mnth)
+
+myData_daily$holiday <- as.factor(myData_daily$holiday)
+myData_hourly$holiday <- as.factor(myData_hourly$holiday)
+
+myData_daily$weekday <- as.factor(myData_daily$weekday)
+myData_hourly$weekday <- as.factor(myData_hourly$weekday)
+
+myData_daily$workingday <- as.factor(myData_daily$workingday)
+myData_hourly$workingday <- as.factor(myData_hourly$workingday)
+
+myData_daily$weathersit <- as.factor(myData_daily$weathersit)
+myData_hourly$weathersit <- as.factor(myData_hourly$weathersit)
+```
+
+# Visualizations
+
+## Weather Influence on Ridership
+
+```{r}
+#Scatterplot for Windspeed and Biker Count 
+set.seed(232)
+# Plot 
+p1<-ggplot(myData_daily, aes(x = windspeed, y =cnt, size = cnt)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_size_continuous(range = c(1, 5)) +
+  labs(x = "Windspeed", y = "Bike Riders",
+       title = "Ridership vs. Windspeed") + theme(legend.position = "none")
+```
+
+
+```{r}
+#Scatterplot for Humidity and Biker Count 
+set.seed(232)
+# Plot 
+p2<-ggplot(myData_daily, aes(x = hum, y =cnt, size = cnt)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_size_continuous(range = c(1, 5)) +
+  labs(x = "Humidity", y = "Bike Riders",
+       title = "Ridership vs. Humidity") + theme(legend.position = "none")
+```
+
+
+```{r out.width="75%"}
+#Scatterplot for Temperature and Biker Count
+set.seed(232)
+# Plot 
+p3<-ggplot(myData_daily, aes(x = temp, y =cnt, size = cnt)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_size_continuous(range = c(1, 5)) +
+  labs(x = "Temperature", y = "Bike Riders",
+       title = "Ridership vs. Temperature") + theme(legend.position = "none")
+
+p4 <- ggplot(myData_daily, aes(x = temp, y =cnt, size = cnt))+
+  geom_point()+
+  lims(x = c(0,0), y = c(0,0))+
+  theme_void()+
+  theme(legend.position = c(0.5,0.5),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size =  12),
+        legend.title = element_text(size = 15, face = "bold"))+
+  guides(colour = guide_legend(override.aes = list(size=8)))
+
+ggarrange(p1,p2,p3,p4, nrow=2, ncol = 2)
+```
+
+Windspeed: This scatter plot shows the relationship between wind speed and the number of bike riders. It shows a linear relationship as wind speed increases, the number of riders decreases.
+
+Humidity: This scatter plot shows the relationship between humidity and the number of bike riders. It shows a linear relationship as humidity increases, the number of bike riders decreases.
+
+Temperature: This scatter plot shows the relationship between temperature and the number of bike riders. It shows a linear relationship as temperature increases, the number of bike riders increases.
+
+## Ridership Distributions
+
+```{r HourlyBar, out.width="50%"}
+myData_hourly %>% group_by(hr) %>% 
+  summarise(cas = mean(casual), reg = mean(cnt)) %>% # change to sum() for total count
+  ggplot(aes(x = hr)) +
+    geom_col(aes(y = reg, fill = "Registered Riders"), position = position_stack()) +
+    geom_col(aes(y = cas, fill = "Casual Riders"), position = position_stack()) +
+  labs(x= "Hour of Day", y = "Average Hourly Ridership", fill = "Rider Type")
+```
+
+With hourly ridership data available, we were interested in seeing what an average day would look like. There appears to be peaks in registered user ridership during typical commuting times, while casual riders fill in the gaps between commuting hours. While we did not use the hourly data in our modeling, it may be an interesting task for future development.
+
+```{r TimeSeriesSmooth, out.width="50%"}
+p4 <-filter(myData_daily, workingday == 0) %>% 
+ ggplot(aes(x = dteday)) +
+  geom_smooth(aes(y = cnt, col = "Total Riders")) +
+  geom_smooth(aes(y = registered, col = "Registered Riders")) +
+  geom_smooth(aes(y = casual, col = "Casual Riders")) +
+  labs(x="Day", y="Total Daily Ridership", col="Rider Type", title = "Weekend & Holiday Ridership")+
+  theme(legend.position = "none")
+p5 <- filter(myData_daily, workingday == 1) %>% 
+ggplot(aes(x = dteday)) +
+  geom_smooth(aes(y = cnt, col = "Total Riders")) +
+  geom_smooth(aes(y = registered, col = "Registered Riders")) +
+  geom_smooth(aes(y = casual, col = "Casual Riders")) +
+  labs(x="Day", y="Total Daily Ridership", col="Rider Type", title = "Workday Ridership") 
+
+ggarrange(p4,p5, nrow=1, common.legend = TRUE)
+```
+
+This plot shows the daily ridership smoothed average over the two years collected by the dataset split by working day status. While there does not seem to be a difference in total ridership, there does seem to be more casual riders on weekends and holidays while working days are almost entirely registered riders.
+
+```{r RidershipPercentage, out.width="50%"}
+mutate(myData_daily, casual_percent = casual / cnt) %>% 
+  ggplot(aes(y=casual_percent, x = workingday, group = workingday)) +
+    geom_violin(scale = "count") +
+    labs(x = "Regular Workday", y = "Percent Casual Riders")
+```
+
+To further explore how working days impact casual or registered ridership, this plot calculates the casual rider percentage and groups by working day. The same pattern emerges where there is very little casual ridership on working days while rivaling registered riders on weekends and holidays.
+
+# Models
+
+
+## Simple Linear Model
+
+```{r}
+model1 <- lm(cnt ~.-cnt-instant-dteday-casual-registered, data = myData_daily)
+
+summary(model1)
+par(mfrow = c(2, 2))
+plot(model1)
+```
+```{r}
+par(mfrow = c(2, 2))  # Set up a 2x2 grid of plots
+for (i in 1:16) {
+  plot(myData_daily[, i], residuals(model1), xlab = names(myData_daily)[i], ylab = "Residuals")
+}
+
+```
+Here is just a simple linear regression model along with some reasonably evenly distributed residual plots. We took out cnt, instant, dteday, casual, registered because they are directly correlated. We can see that the data is indeed linear with a high R^2 however we can do better with a trained model.
+
+
+## Polynomial Regression
+```{r}
+bikepoly <- lm(cnt ~.-instant-dteday-casual-registered + poly(temp,3), data = myData_daily)
+summary(bikepoly)
+```
+The output displays the results of a polynomial regression model applied to predict bike ridership based on various factors including temperature, season, and weather conditions. Notably, the inclusion of a polynomial transformation of temperature up to the third degree allows for capturing potential non-linear relationships. The significant negative effect of the third degree polynomial term suggests that extreme temperatures may deter individuals from using bikes, providing valuable insights for bike sharing system operators to adjust service provision accordingly.
+
+## Training Multilinear Regression
+
+
+```{r}
+
+myData_daily$cnt <- as.numeric(myData_daily$cnt)
+
+myData_daily_model <- myData_daily[, !(names(myData_daily) %in% c("dteday"))]
+
+
+set.seed(123)  
+trainIndex <- sample(1:nrow(myData_daily_model), 0.8 * nrow(myData_daily_model))  # 80% train, 20% test
+trainData <- myData_daily_model[trainIndex, ]
+testData <- myData_daily_model[-trainIndex, ]
+
+```
+
+```{r out.width="50%"}
+# Fit linear regression model using training data
+model <- lm(cnt ~ . - instant - casual - registered, data = trainData)
+
+# Make predictions on the test data
+predictions <- predict(model, newdata = testData)
+
+# Create a scatter plot of actual vs. predicted values
+plot(testData$cnt, predictions,
+ 	xlab = "Actual Values", ylab = "Predicted Values",
+ 	main = "Actual vs. Predicted Values")
+
+# Add a reference line (y = x) for perfect predictions
+abline(0, 1, col = "red")
+
+summary(model)
+```
+For Multilinear regression we partitioned the data to 80 train 20 test so we can get a more reasonable look at the data. Here we see the R^2 decreases only by a little and the coefficients have sharper magnitudes. Looking at the Actual vs. Predicted values scatter plot, we can see our model is quite efficient. 
+
+
+## AIC 
+```{r}
+#AIC
+selected=c()
+varnames=names(myData_daily)
+candidate= varnames[-c(1, 2, 13:15)]
+lm.fit=lm(cnt ~ 1, data= myData_daily)
+aic.selected=c()
+
+nvar=10
+for(k in 1: nvar) {
+  n.candidate= length(candidate)
+  aiclist=rep(0, n.candidate)
+  for(i in 1: n.candidate){
+	cand.mod = update(lm.fit, as.formula(paste(".~ .+", candidate[i])))
+	aiclist[i]=AIC(cand.mod)
+  }
+  index=which(aiclist== min(aiclist))
+  selected=c(selected, candidate[index])
+  aic.selected=c(aic.selected, min(aiclist))
+  lm.fit=update(lm.fit, as.formula(paste(".~. +", candidate[index])))
+  candidate=candidate[-index]
+}
+
+```
+```{r}
+selected
+summary(lm.fit)
+```
+
+```{r}
+
+initial_model <- lm(cnt ~ atemp + yr + weathersit + mnth + weekday + windspeed + hum + holiday, data = myData_daily)
+
+
+# Perform stepwise selection based on AIC
+final_model <- step(initial_model, direction = "both")
+summary(final_model)
+```
+
+```{r}
+
+predictions <- predict(final_model)
+
+plot(myData_daily$cnt, predictions,
+ 	xlab = "Observed Count", ylab = "Predicted Count",
+ 	main = "Observed vs. Predicted Counts")
+
+abline(a = 0, b = 1, col = "red")
+
+```
+
+For a variable selection approach we wanted to use Akaike Information Criterion (AIC) which selects the variables that minimize AIC value and then we can perform stepwise. Stepwise pulled the most significant predictor coefficients out of the data. We see that the R^2 is a high value and the residuals plot indicates the model is predicting the data correctly. 
+
+
+
+## Lasso Regression 
+
+```{r}
+# Remove the target variable 'cnt' and the excluded variables from the dataset
+myData_clean <- myData_daily[, !(names(myData_daily) %in% c("instant", "casual", "registered"))]
+
+# Create the design matrix 'x' and the response vector 'y'
+x <- model.matrix(cnt ~ ., data = myData_clean)[, -myData_clean$cnt]  # Exclude the intercept column
+y <- myData_clean$cnt
+
+
+```
+
+```{r}
+set.seed(1)
+train <- sample(1:nrow(x), nrow(x) / 2)
+test <- (-train)
+y.test <- y[test]
+```
+```{r out.width="50%"}
+
+cv.cnt <- cv.glmnet(x[train, ], y[train], alpha = 0)
+plot(cv.cnt)
+```
+```{r out.width="50%"}
+grid <- 10^seq(10, -2, length = 100)
+lasso.mod <- glmnet(x[train, ], y[train], alpha = 1,lambda = grid)
+plot(lasso.mod)
+```
+```{r out.width="50%"}
+set.seed(1)
+cv.out <- cv.glmnet(x[train, ], y[train], alpha = 1)
+plot(cv.out)
+```
+
+```{r}
+bestlam <- cv.cnt$lambda.min
+paste("Best Lamda: ", bestlam)
+```
+
+```{r}
+ridge.mod <- glmnet(x[train, ], y[train], alpha = 0,
+                	lambda = bestlam, thresh = 1e-12)
+ridge.pred <- predict(ridge.mod, newx = x[test, ])
+
+mse <- mean((ridge.pred - y.test)^2)
+
+rmse <- sqrt(mse)
+
+paste("RMSE: ", rmse)
+```
+
+```{r out.width="50%"}
+yeet <- glmnet(x, y, alpha = 0)
+coeff_pred <- predict(yeet, type = "coefficients", s = bestlam)[1:15, ]
+print(coeff_pred)
+```
+
+For Lasso Regression (alpha = 1), we can see by plotting with the L1 Norm that only a few variables got pushed to zero, season3 (fall), workingday1, and holiday1 as well as some variables coming close to zero with respect to the data’s range. We also have ridge regression included (alpha = 0). Cross validation was used to find the optimal lambda values which would minimize the least squares error within our model.
+
+
+
+## Random Forests
+
+```{r out.width="50%"}
+set.seed(267)
+
+
+# Train the Random Forest model
+rf_model <- randomForest(cnt ~ . - instant - casual - registered, data = trainData, ntree = 500)
+
+# Print the model summary
+print(rf_model)
+
+# Make predictions on the test set
+predictions <- predict(rf_model, newdata = testData)
+
+# Evaluate model performance (e.g., calculate RMSE)
+rmse <- sqrt(mean((testData$cnt - predictions)^2))
+print(paste("RMSE:", rmse))
+plot(rf_model)
+
+```
+```{r}
+# Adjusted R-squared
+R_squared <- 0.8828
+n <- 731  
+k <- 13    
+
+R_squared_adj <- 1 - ((1 - R_squared) * (n - 1) / (n - k - 1))
+
+print(paste("Adjusted R-squared:", R_squared_adj))
+
+```
+```{r}
+#Cross Validation for Random Forests
+
+
+set.seed(163)  
+train_idx <- sample(nrow(trainData), 0.8 * nrow(trainData))
+train_set <- trainData[train_idx, ]
+validation_set <- trainData[-train_idx, ]
+
+ntree_values <- seq(50, 500, by = 50)
+
+validation_error <- numeric(length(ntree_values))
+
+for (i in seq_along(ntree_values)) {
+
+  rf_model <- randomForest(cnt ~ . - instant - casual - registered, data = train_set, ntree = ntree_values[i])
+ 
+
+  predictions <- predict(rf_model, newdata = validation_set)
+ 
+
+  validation_error[i] <- sqrt(mean((validation_set$cnt - predictions)^2))
+}
+
+
+optimal_ntree <- ntree_values[which.min(validation_error)]
+print(paste("Optimal number of trees:", optimal_ntree))
+
+```
+
+
+Random Forests are a little bit of a black box in terms of interpretability however we still wanted to give the model a shot in hopes of at least becoming a comparison model for MLR, Poly reg, Lasso, etc. Using all of the predictors, we achieved an adj. R^2 of 0.878 which is the highest out of our many models. In addition to this, we tried utilizing an optimal number of trees in our model which found 250 as the optimal, but we decided on 500 trees to get a better view of the data and to drive the R^2 up as the trade off metric, RMSE, didn’t change much with respect to the 250-500 range. 
+
+
+## Artificial Neural Networks
+
+The linear models performed well, but there may be hidden nonlinear relationships that we did not identify, so training an artificial neural network may capture that hidden variation.
+
+### Predicting total ridership
+
+To predict total ridership, the data was randomly split into an 80% train 20% test validation scheme. The predictors season and atemp were removed from the inputs as they greatly increased the error and decreased the model fitness. The neural network models were evaluated by their residual sum of squared error and many variations of the neuron structure were tested. Neural network number 4 with 2, 4, and 3 hidden layers was found to be the optimal model with the overall model having a respectable 0.71 adjusted R-squared value. With additional experimentation on layer structure this may improve, but the model is still overall good for predicting ridership.
+
+```{r out.width="50%"}
+model_data <- select(myData_daily, season, (mnth:windspeed),cnt)
+scale01 <- function(x){
+  (x - min(x)) / (max(x) - min(x))
+}
+model_data$cnt <- scale01(model_data$cnt)
+new_df <- model.matrix(~.-1, data = model_data[, c("season","mnth","holiday","weekday","workingday","weathersit")],
+                       contrasts.arg = list(
+                         season = contrasts(model_data$season, contrasts = FALSE),
+                         mnth = contrasts(model_data$mnth, contrasts = FALSE),
+                         holiday = contrasts(model_data$holiday, contrasts = FALSE),
+                         weekday = contrasts(model_data$weekday, contrasts = FALSE),
+                         workingday = contrasts(model_data$workingday, contrasts = FALSE),
+                         weathersit = contrasts(model_data$weathersit, contrasts = FALSE)
+                       ))
+
+encoded_data <- bind_cols(model_data[,-c(1:6,8)], new_df)
+set.seed(286)
+myData_Train <- sample_frac(tbl = encoded_data, replace = FALSE, size = 0.80)
+myData_Test <- anti_join(encoded_data, myData_Train)
+Bike_NN1 <- neuralnet(cnt ~ ., data = myData_Train)
+plot(Bike_NN1, rep = 'best')
+NN1_Train_SSE <-sum((Bike_NN1$net.result - tibble(myData_Train$cnt))^2)/2
+Test_NN1_Output <- compute(Bike_NN1, myData_Test[, -4])$net.result
+NN1_Test_SSE <- sum((Test_NN1_Output - tibble(myData_Train$cnt))^2)/2
+
+Bike_NN2 <- neuralnet(cnt ~ ., data = myData_Train, hidden = c(2, 2),act.fct = "logistic")
+plot(Bike_NN2, rep = 'best')
+NN2_Train_SSE <-sum((Bike_NN2$net.result - tibble(myData_Train$cnt))^2)/2
+Test_NN2_Output <- compute(Bike_NN2, myData_Test[, -4])$net.result
+NN2_Test_SSE <- sum((Test_NN2_Output - tibble(myData_Train$cnt))^2)/2
+
+Bike_NN3 <- neuralnet(cnt ~ ., data = myData_Train, hidden = c(3, 2))
+plot(Bike_NN3, rep = 'best')
+NN3_Train_SSE <-sum((Bike_NN3$net.result - tibble(myData_Train$cnt))^2)/2
+Test_NN3_Output <- compute(Bike_NN3, myData_Test[, -4])$net.result
+NN3_Test_SSE <- sum((Test_NN3_Output - tibble(myData_Train$cnt))^2)/2
+
+Bike_NN4 <- neuralnet(cnt ~ ., data = myData_Train, hidden = c(2, 4,3),act.fct = "logistic")
+plot(Bike_NN4, rep = 'best')
+NN4_Train_SSE <-sum((Bike_NN4$net.result - tibble(myData_Train$cnt))^2)/2
+Test_NN4_Output <- compute(Bike_NN4, myData_Test[, -4])$net.result
+NN4_Test_SSE <- sum((Test_NN4_Output - tibble(myData_Train$cnt))^2)/2
+
+tibble(Network = rep(c("NN1", "NN2", "NN3", "NN4"), each = 2), 
+                               DataSet = rep(c("Train", "Test"), time = 4), 
+                               SSE = c(NN1_Train_SSE, NN1_Test_SSE, 
+                                       NN2_Train_SSE, NN2_Test_SSE, 
+                                       NN3_Train_SSE, NN3_Test_SSE, 
+                                       NN4_Train_SSE, NN4_Test_SSE)) %>% 
+  ggplot(aes(Network, SSE, fill = DataSet)) + 
+  geom_col(position = "dodge") + 
+  ggtitle("Regression ANN's SSE")
+
+
+
+
+Bike_NN5 <- neuralnet(cnt ~ ., data = encoded_data, hidden = c(2, 4,3),act.fct = "logistic")
+#plot(Bike_NN5, rep = 'best')
+NN5_Train_SSE <-sum((Bike_NN5$net.result - tibble(encoded_data$cnt))^2)/2
+Test_NN5_Output <- compute(Bike_NN5, encoded_data[, -4])$net.result
+
+calculateR2adj <- function(y, yhat, p) {
+  n <- length(y)
+  rsq <- 1 - sum((y-yhat)^2)/sum((y-mean(y))^2)
+  return(1 - (((n-1)*(1-rsq))/(n-p-1)))
+}
+paste("Adjusted R Squared: ",
+      calculateR2adj(encoded_data$cnt,as.vector(Test_NN5_Output),9))
+
+```
+
+
+### Predicting casual ridership percentage
+
+This model was trained similarly to the total ridership neural network, but it used the calculated casual ridership percentage as the dependent variable. This relationship is important to understand when making business operational decisions as casual riders appear to be more weather and temporally dependent which may impact how system expansion plans are designed. This model was also trained on an 80/20 validation split and evaluated with residual SSE. The optimal layer structure was 1, 4, 1 and the overall adjusted R-squared was 0.824, which is about on par with the multiple linear regression.
+
+```{r out.width="50%"}
+
+model_data <- mutate(myData_daily, casual_percent = casual / cnt) %>% select(season, (mnth:windspeed),casual_percent)
+new_df <- model.matrix(~.-1, data = model_data[, c("season","mnth","holiday","weekday","workingday","weathersit")],
+                       contrasts.arg = list(
+                         season = contrasts(model_data$season, contrasts = FALSE),
+                         mnth = contrasts(model_data$mnth, contrasts = FALSE),
+                         holiday = contrasts(model_data$holiday, contrasts = FALSE),
+                         weekday = contrasts(model_data$weekday, contrasts = FALSE),
+                         workingday = contrasts(model_data$workingday, contrasts = FALSE),
+                         weathersit = contrasts(model_data$weathersit, contrasts = FALSE)
+                       ))
+
+encoded_data <- bind_cols(model_data[,-c(1:6,8)], new_df)
+set.seed(286)
+myData_Train <- sample_frac(tbl = encoded_data, replace = FALSE, size = 0.80)
+myData_Test <- anti_join(encoded_data, myData_Train)
+Bike_NN1 <- neuralnet(casual_percent ~ ., data = myData_Train)
+
+NN1_Train_SSE <-sum((Bike_NN1$net.result - tibble(myData_Train$casual_percent))^2)/2
+Test_NN1_Output <- compute(Bike_NN1, myData_Test[, -4])$net.result
+NN1_Test_SSE <- sum((Test_NN1_Output - tibble(myData_Train$casual_percent))^2)/2
+
+Bike_NN2 <- neuralnet(casual_percent ~ ., data = myData_Train, hidden = c(2, 2),act.fct = "logistic")
+
+NN2_Train_SSE <-sum((Bike_NN2$net.result - tibble(myData_Train$casual_percent))^2)/2
+Test_NN2_Output <- compute(Bike_NN2, myData_Test[, -4])$net.result
+NN2_Test_SSE <- sum((Test_NN2_Output - tibble(myData_Train$casual_percent))^2)/2
+
+Bike_NN3 <- neuralnet(casual_percent ~ ., data = myData_Train, hidden = c(2, 1))
+
+NN3_Train_SSE <-sum((Bike_NN3$net.result - tibble(myData_Train$casual_percent))^2)/2
+Test_NN3_Output <- compute(Bike_NN3, myData_Test[, -4])$net.result
+NN3_Test_SSE <- sum((Test_NN3_Output - tibble(myData_Train$casual_percent))^2)/2
+
+Bike_NN4 <- neuralnet(casual_percent ~ ., data = myData_Train, hidden = c(1, 4,1),act.fct = "logistic")
+
+NN4_Train_SSE <-sum((Bike_NN4$net.result - tibble(myData_Train$casual_percent))^2)/2
+Test_NN4_Output <- compute(Bike_NN4, myData_Test[, -4])$net.result
+NN4_Test_SSE <- sum((Test_NN4_Output - tibble(myData_Train$casual_percent))^2)/2
+par(mfrow = c(2, 2))
+plot(Bike_NN1, rep = 'best')
+plot(Bike_NN2, rep = 'best')
+plot(Bike_NN3, rep = 'best')
+plot(Bike_NN4, rep = 'best')
+tibble(Network = rep(c("NN1", "NN2", "NN3", "NN4"), each = 2), 
+                               DataSet = rep(c("Train", "Test"), time = 4), 
+                               SSE = c(NN1_Train_SSE, NN1_Test_SSE, 
+                                       NN2_Train_SSE, NN2_Test_SSE, 
+                                       NN3_Train_SSE, NN3_Test_SSE, 
+                                       NN4_Train_SSE, NN4_Test_SSE)) %>% 
+  ggplot(aes(Network, SSE, fill = DataSet)) + 
+  geom_col(position = "dodge") + 
+  ggtitle("Regression ANN's SSE")
+
+
+Bike_NN5 <- neuralnet(casual_percent ~ ., data = encoded_data, hidden = c(1, 4, 1),act.fct = "logistic")
+#plot(Bike_NN5, rep = 'best')
+NN5_Train_SSE <-sum((Bike_NN5$net.result - tibble(encoded_data$casual_percent))^2)/2
+Test_NN5_Output <- compute(Bike_NN5, encoded_data[, -4])$net.result
+
+calculateR2adj <- function(y, yhat, p) {
+  n <- length(y)
+  rsq <- 1 - sum((y-yhat)^2)/sum((y-mean(y))^2)
+  return(1 - (((n-1)*(1-rsq))/(n-p-1)))
+}
+paste("Adjusted R Squared: ",
+      calculateR2adj(encoded_data$casual_percent,as.vector(Test_NN5_Output),9))
+```
+
+
+
+
+
+
+
+
+
+
+
+# Conclusion
+
+## Model Performance
+
+| Model                   | Adj.R2 |
+|-------------------------|--------|
+| Polynomial           | 0.872  |
+| MLR                     | 0.845  |
+|Stepwise AIC	      | 0.823   |
+| Lasso                   | 0.876  |
+| Random Forests          | 0.878  |
+| Neural Network Total    | 0.707  |
+| Neural Network % Casual | 0.824  |
+
+All models performed very well at explaining the variance in the original data as seen with the high adjusted R-squared metrics. The best model we created was the Random Forests model which makes sense as its decision tree structure might align with the decisions made by human customers looking at the weather and the day of the week when considering whether to rent the bicycles. The polynomial linear models’ strong performance also indicates that ridership levels could have nonlinear effects that we can further model. The linear models all performed well and the coefficients may offer insights into the effects of weather and the date on ridership. Finally, the neural networks performed well but they were outperformed by the other models, which may indicate that there is not a nonlinear relationship those models did not take into account.
+
+## Applications
+
+By better understanding the factors influencing ridership, the bike share company will be able to predict their future demand and account for trends in ridership that may not be obvious when looking only at daily ridership numbers. With further information about casual rider to registered rider conversion, we may be able to suggest increased marketing or coupons on holidays and weekends where casual riders are most prevalent. Finally, by understanding the relationship between weather and ridership, the bike share company may be able to utilize this information to put reserve bikes into service on days with optimal weather conditions or increase advertising when good conditions are forecast.
+
+We believe there is a lot of information that can be used to inform these business decisions and many more with just the weather and temporal data, so we recommend that the bike share companies collect and utilize this information if they are not already doing so.
