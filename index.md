@@ -11,9 +11,16 @@ sidebar_label: Home
 
 ### Personal:
 
-Coming soon...
+👾🐔 [Discord Free Food Bot](prj/Discord.md)
 
 ### Academic:
+##### 2024
+🏀 [Analyzing NBA AllStars](prj/NBA.md)
+
+🏘️ [Analyzing AirBnb listings](prj/Airbnb.md)
+
+🚲 [Evaluating Bike Share Ridership](prj/Bikeshare.md)
+
 ##### 2023
 🍷 [Predicting Red Wine Quality](prj/Wine.md)
 

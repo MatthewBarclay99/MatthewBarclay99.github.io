@@ -6,11 +6,14 @@ title: Matthew Barclay
 sidebar:
  - home
  #- about
- #- label: Personal projects
-   #children:
-   #- 
+ - label: Personal projects
+   children:
+   - discord
  - label: Academic projects
    children:
+   - nba
+   - airbnb
+   - bikeshare
    - wine
    - adoptions
    - parking
@@ -20,3 +23,6 @@ linkedin_badge: |
   <script src="https://platform.linkedin.com/badges/js/profile.js" async defer type="text/javascript"></script>
   <div class="badge-base LI-profile-badge" data-locale="en_US" data-size="medium" data-theme="light" data-type="VERTICAL" data-vanity="mattbarclay99" data-version="v1"></div>
               
+github_badge: |
+  <div class="github-card" data-github="MatthewBarclay99/DiscordChickenMessageBot" data-width="400" data-height="" data-theme="medium"></div>
+  <script src="//cdn.jsdelivr.net/github-cards/latest/widget.js"></script>
