@@ -28,6 +28,6 @@ STAT 232: Statistics for Business Analytics at UCR
 
 #### Images:
 
-<img src="https://MatthewBarclay99.github.io/assets/docs/Airbnb/quantity2.jpeg" width="250" height="250"/>
+<img src="https://MatthewBarclay99.github.io/assets/docs/Airbnb/quantity2.jpeg" width="500" height="500"/>
 
-<img src="https://MatthewBarclay99.github.io/assets/docs/Airbnb/price2.jpeg" width="250" height="250"/>
+<img src="https://MatthewBarclay99.github.io/assets/docs/Airbnb/price2.jpeg" width="500" height="500"/>
